@@ -446,7 +446,6 @@ function appHtml() {
 
         <div class="row">
           <button id="go" class="primary" disabled>Generate + Download PDF</button>
-          <button id="report" class="ghost" disabled>Update preview</button>
         </div>
 
         <div id="meta" class="meta"></div>
@@ -488,7 +487,6 @@ async function main() {
   const updateButtons = () => {
     const ok = Boolean(currentInput);
     $('#go').disabled = !ok;
-    $('#report').disabled = !ok;
   };
 
   $('#preset').addEventListener('change', async () => {
@@ -506,7 +504,6 @@ async function main() {
     $(id.startsWith('#') ? id : '#' + id).addEventListener('change', refresh);
   }
 
-  $('#report').addEventListener('click', refresh);
 
   $('#file').addEventListener('change', async (e) => {
     const f = e.target.files?.[0] || null;
