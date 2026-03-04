@@ -147,7 +147,7 @@ async function loadInput(file) {
   };
 }
 
-async function renderPreview({ input, mode, allowRotate }) {
+async function renderPreview({ input, mode, allowRotate, dpi }) {
   const canvas = $('#preview');
   const ctx = canvas.getContext('2d');
 
@@ -156,8 +156,9 @@ async function renderPreview({ input, mode, allowRotate }) {
   // For IMAGE inputs, auto-rotate means "choose portrait vs landscape output" like a print dialog.
   // (PDF inputs keep the selected page size; we rotate content instead.)
   if (input.kind === 'image' && allowRotate) {
-    const srcWpt = (input.w / 300) * POINTS_PER_INCH;
-    const srcHpt = (input.h / 300) * POINTS_PER_INCH;
+    const useDpi = dpi || 300;
+    const srcWpt = (input.w / useDpi) * POINTS_PER_INCH;
+    const srcHpt = (input.h / useDpi) * POINTS_PER_INCH;
     const dstWpt = wIn * POINTS_PER_INCH;
     const dstHpt = hIn * POINTS_PER_INCH;
 
@@ -439,6 +440,11 @@ function appHtml() {
         </div>
 
         <div class="row">
+          <label>DPI (images)</label>
+          <input id="dpi" type="number" step="1" min="10" max="1200" value="300" />
+        </div>
+
+        <div class="row">
           <button id="go" class="primary" disabled>Generate + Download PDF</button>
           <button id="report" class="ghost" disabled>Update preview</button>
         </div>
@@ -466,8 +472,9 @@ async function refresh() {
   if (!currentInput) return;
   const mode = $('#mode').value;
   const allowRotate = $('#rotate').checked;
+  const dpi = clamp(Number($('#dpi')?.value || 300), 10, 1200);
 
-  await renderPreview({ input: currentInput, mode, allowRotate });
+  await renderPreview({ input: currentInput, mode, allowRotate, dpi });
 }
 
 async function main() {
@@ -495,7 +502,7 @@ async function main() {
     await refresh();
   });
 
-  for (const id of ['wIn', 'hIn', 'mode', 'rotate']) {
+  for (const id of ['wIn', 'hIn', 'mode', 'rotate', 'dpi']) {
     $(id.startsWith('#') ? id : '#' + id).addEventListener('change', refresh);
   }
 
@@ -544,7 +551,8 @@ async function main() {
       status.textContent = `Generating ${fmtIn(wIn)}×${fmtIn(hIn)} PDF…`;
       await time(10);
 
-      const bytes = await buildOutputPdf({ input: currentInput, wIn, hIn, mode, allowRotate, dpi: 300 });
+      const dpi = clamp(Number($('#dpi')?.value || 300), 10, 1200);
+      const bytes = await buildOutputPdf({ input: currentInput, wIn, hIn, mode, allowRotate, dpi });
       const base = (currentInput.name || 'output').replace(/\.(pdf|png|jpe?g)$/i, '');
       const outName = `${base}_${fmtIn(wIn)}x${fmtIn(hIn)}_${mode}.pdf`;
       downloadBytes(bytes, outName);
