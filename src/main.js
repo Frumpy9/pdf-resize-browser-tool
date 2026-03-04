@@ -63,7 +63,9 @@ function computePlacement({ srcW, srcH, dstW, dstH, mode, allowRotate }) {
   // Returns: { drawW, drawH, x, y, rotateDeg }
   const fit = (sw, sh, dw, dh) => {
     if (mode === 'distort') {
-      return { drawW: dw, drawH: dh, scaleX: dw / sw, scaleY: dh / sh };
+      const scaleX = dw / sw;
+      const scaleY = dh / sh;
+      return { drawW: dw, drawH: dh, scaleX, scaleY, scale: Math.min(scaleX, scaleY) };
     }
     const s = mode === 'cover'
       ? Math.max(dw / sw, dh / sh)
@@ -71,15 +73,20 @@ function computePlacement({ srcW, srcH, dstW, dstH, mode, allowRotate }) {
     return { drawW: sw * s, drawH: sh * s, scale: s };
   };
 
+  const score = (p) => {
+    if (mode === 'distort') {
+      // Prefer the least-distorted (scaleX≈scaleY) and biggest minimum scale.
+      const ratio = p.scaleX && p.scaleY ? Math.max(p.scaleX / p.scaleY, p.scaleY / p.scaleX) : 999;
+      return (p.scale || 0) * 1000 - ratio; // larger is better
+    }
+    // For contain/cover: bigger scale means content is larger on the page (better fit).
+    return p.scale || 0;
+  };
+
   let best = { rotateDeg: 0, ...fit(srcW, srcH, dstW, dstH) };
 
   if (allowRotate) {
     const rot = { rotateDeg: 90, ...fit(srcH, srcW, dstW, dstH) };
-    const score = (p) => {
-      // Prefer larger scale for contain/cover; for distort prefer less extreme scaling? Keep simple.
-      if (mode === 'distort') return p.drawW * p.drawH;
-      return p.drawW * p.drawH;
-    };
     if (score(rot) > score(best)) best = rot;
   }
 
@@ -184,17 +191,28 @@ async function renderPreview({ input, mode, allowRotate }) {
   const srcH = srcCanvas.height;
   const placement = computePlacement({ srcW, srcH, dstW: cw, dstH: ch, mode, allowRotate });
 
-  ctx.save();
+  // If auto-rotating, rotate the SOURCE bitmap first (simpler + matches PDF output).
+  let drawCanvas = srcCanvas;
   if (placement.rotateDeg === 90) {
-    // rotate around center of destination canvas, then draw centered using swapped dimensions
-    ctx.translate(cw / 2, ch / 2);
-    ctx.rotate(Math.PI / 2);
-    ctx.translate(-cw / 2, -ch / 2);
+    const rot = document.createElement('canvas');
+    rot.width = srcCanvas.height;
+    rot.height = srcCanvas.width;
+    const rctx = rot.getContext('2d');
+    rctx.translate(rot.width / 2, rot.height / 2);
+    rctx.rotate(Math.PI / 2);
+    rctx.drawImage(srcCanvas, -srcCanvas.width / 2, -srcCanvas.height / 2);
+    drawCanvas = rot;
+
+    // recompute placement for rotated bitmap (rotateDeg=0 now)
+    const p2 = computePlacement({ srcW: drawCanvas.width, srcH: drawCanvas.height, dstW: cw, dstH: ch, mode, allowRotate: false });
+    placement.x = p2.x;
+    placement.y = p2.y;
+    placement.drawW = p2.drawW;
+    placement.drawH = p2.drawH;
   }
 
-  // Draw image; for cover mode, draw larger and it will crop outside the page border naturally.
-  ctx.drawImage(srcCanvas, placement.x, placement.y, placement.drawW, placement.drawH);
-  ctx.restore();
+  // Draw bitmap; for cover mode, draw larger and it will crop outside the page border naturally.
+  ctx.drawImage(drawCanvas, placement.x, placement.y, placement.drawW, placement.drawH);
 
   // subtle overlay to show crop area
   ctx.fillStyle = 'rgba(200,16,46,0.05)';
