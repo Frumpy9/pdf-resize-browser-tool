@@ -149,7 +149,31 @@ async function renderPreview({ input, mode, allowRotate }) {
   const canvas = $('#preview');
   const ctx = canvas.getContext('2d');
 
-  const { wIn, hIn } = getOutputSizeIn();
+  let { wIn, hIn } = getOutputSizeIn();
+
+  // For IMAGE inputs, auto-rotate means "choose portrait vs landscape output" like a print dialog.
+  // (PDF inputs keep the selected page size; we rotate content instead.)
+  if (input.kind === 'image' && allowRotate && mode !== 'distort') {
+    const srcWpt = (input.w / 300) * POINTS_PER_INCH;
+    const srcHpt = (input.h / 300) * POINTS_PER_INCH;
+    const dstWpt = wIn * POINTS_PER_INCH;
+    const dstHpt = hIn * POINTS_PER_INCH;
+
+    const s1 = mode === 'cover'
+      ? Math.max(dstWpt / srcWpt, dstHpt / srcHpt)
+      : Math.min(dstWpt / srcWpt, dstHpt / srcHpt);
+
+    const s2 = mode === 'cover'
+      ? Math.max(dstHpt / srcWpt, dstWpt / srcHpt)
+      : Math.min(dstHpt / srcWpt, dstWpt / srcHpt);
+
+    if (s2 > s1) {
+      const tmp = wIn;
+      wIn = hIn;
+      hIn = tmp;
+    }
+  }
+
   const dstW = Math.round(wIn * 100);
   const dstH = Math.round(hIn * 100);
 
@@ -189,11 +213,12 @@ async function renderPreview({ input, mode, allowRotate }) {
 
   const srcW = srcCanvas.width;
   const srcH = srcCanvas.height;
-  const placement = computePlacement({ srcW, srcH, dstW: cw, dstH: ch, mode, allowRotate });
+  const placement = computePlacement({ srcW, srcH, dstW: cw, dstH: ch, mode, allowRotate: input.kind === 'pdf' ? allowRotate : false });
 
-  // If auto-rotating, rotate the SOURCE bitmap first (simpler + matches PDF output).
+  // For image inputs we do NOT rotate the content anymore (we swap output orientation above).
+  // For PDF preview we still support rotating the rendered page bitmap.
   let drawCanvas = srcCanvas;
-  if (placement.rotateDeg === 90) {
+  if (input.kind === 'pdf' && placement.rotateDeg === 90) {
     const rot = document.createElement('canvas');
     rot.width = srcCanvas.height;
     rot.height = srcCanvas.width;
@@ -203,7 +228,6 @@ async function renderPreview({ input, mode, allowRotate }) {
     rctx.drawImage(srcCanvas, -srcCanvas.width / 2, -srcCanvas.height / 2);
     drawCanvas = rot;
 
-    // recompute placement for rotated bitmap (rotateDeg=0 now)
     const p2 = computePlacement({ srcW: drawCanvas.width, srcH: drawCanvas.height, dstW: cw, dstH: ch, mode, allowRotate: false });
     placement.x = p2.x;
     placement.y = p2.y;
@@ -220,6 +244,29 @@ async function renderPreview({ input, mode, allowRotate }) {
 }
 
 async function buildOutputPdf({ input, wIn, hIn, mode, allowRotate, dpi = 300 }) {
+  // For IMAGE inputs, auto-rotate means swapping output page orientation (portrait vs landscape).
+  if (input.kind === 'image' && allowRotate && mode !== 'distort') {
+    const srcWpt = (input.w / dpi) * POINTS_PER_INCH;
+    const srcHpt = (input.h / dpi) * POINTS_PER_INCH;
+
+    const dstWpt0 = wIn * POINTS_PER_INCH;
+    const dstHpt0 = hIn * POINTS_PER_INCH;
+
+    const s1 = mode === 'cover'
+      ? Math.max(dstWpt0 / srcWpt, dstHpt0 / srcHpt)
+      : Math.min(dstWpt0 / srcWpt, dstHpt0 / srcHpt);
+
+    const s2 = mode === 'cover'
+      ? Math.max(dstHpt0 / srcWpt, dstWpt0 / srcHpt)
+      : Math.min(dstHpt0 / srcWpt, dstWpt0 / srcHpt);
+
+    if (s2 > s1) {
+      const tmp = wIn;
+      wIn = hIn;
+      hIn = tmp;
+    }
+  }
+
   const dstWpt = wIn * POINTS_PER_INCH;
   const dstHpt = hIn * POINTS_PER_INCH;
 
@@ -237,12 +284,12 @@ async function buildOutputPdf({ input, wIn, hIn, mode, allowRotate, dpi = 300 })
 
       const page = out.addPage([dstWpt, dstHpt]);
       if (placement.rotateDeg === 90) {
-        // pdf-lib rotates around the drawn object's origin; adjust x so the rotated content stays on-page.
+        // width/height are applied BEFORE rotation. Use swapped dims so the post-rotation bbox matches.
         page.drawPage(embedded, {
           x: placement.x + placement.drawW,
           y: placement.y,
-          width: placement.drawW,
-          height: placement.drawH,
+          width: placement.drawH,
+          height: placement.drawW,
           rotate: degrees(90),
         });
       } else {
@@ -270,14 +317,13 @@ async function buildOutputPdf({ input, wIn, hIn, mode, allowRotate, dpi = 300 })
   const sw = (input.w / dpi) * POINTS_PER_INCH;
   const sh = (input.h / dpi) * POINTS_PER_INCH;
 
-  const placement = computePlacement({ srcW: sw, srcH: sh, dstW: dstWpt, dstH: dstHpt, mode, allowRotate });
+  const placement = computePlacement({ srcW: sw, srcH: sh, dstW: dstWpt, dstH: dstHpt, mode, allowRotate: false });
 
   page.drawImage(img, {
-    x: placement.rotateDeg === 90 ? (placement.x + placement.drawW) : placement.x,
+    x: placement.x,
     y: placement.y,
     width: placement.drawW,
     height: placement.drawH,
-    rotate: placement.rotateDeg === 90 ? degrees(90) : undefined,
   });
 
   return await out.save();
