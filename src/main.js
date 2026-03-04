@@ -79,8 +79,10 @@ function computePlacement({ srcW, srcH, dstW, dstH, mode, allowRotate }) {
       const ratio = p.scaleX && p.scaleY ? Math.max(p.scaleX / p.scaleY, p.scaleY / p.scaleX) : 999;
       return (p.scale || 0) * 1000 - ratio; // larger is better
     }
-    // For contain/cover: bigger scale means content is larger on the page (better fit).
-    return p.scale || 0;
+    // For contain: bigger scale means content is larger on the page (better fit).
+  // For cover: smaller scale means less crop while still filling.
+    const s = p.scale || 0;
+    return mode === 'cover' ? -s : s;
   };
 
   let best = { rotateDeg: 0, ...fit(srcW, srcH, dstW, dstH) };
@@ -186,7 +188,8 @@ async function renderPreview({ input, mode, allowRotate }) {
         ? Math.max(dstHpt / srcWpt, dstWpt / srcHpt)
         : Math.min(dstHpt / srcWpt, dstWpt / srcHpt);
 
-      return s2 > s1;
+      // contain: pick larger scale (bigger content). cover: pick smaller scale (less crop).
+      return mode === 'cover' ? (s2 < s1) : (s2 > s1);
     };
 
     if (chooseSwap()) {
@@ -297,7 +300,8 @@ async function buildOutputPdf({ input, wIn, hIn, mode, allowRotate, dpi = 300 })
         ? Math.max(dstHpt0 / srcWpt, dstWpt0 / srcHpt)
         : Math.min(dstHpt0 / srcWpt, dstWpt0 / srcHpt);
 
-      return s2 > s1;
+      // contain: pick larger scale (bigger content). cover: pick smaller scale (less crop).
+      return mode === 'cover' ? (s2 < s1) : (s2 > s1);
     };
 
     if (chooseSwap()) {
