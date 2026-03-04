@@ -153,21 +153,43 @@ async function renderPreview({ input, mode, allowRotate }) {
 
   // For IMAGE inputs, auto-rotate means "choose portrait vs landscape output" like a print dialog.
   // (PDF inputs keep the selected page size; we rotate content instead.)
-  if (input.kind === 'image' && allowRotate && mode !== 'distort') {
+  if (input.kind === 'image' && allowRotate) {
     const srcWpt = (input.w / 300) * POINTS_PER_INCH;
     const srcHpt = (input.h / 300) * POINTS_PER_INCH;
     const dstWpt = wIn * POINTS_PER_INCH;
     const dstHpt = hIn * POINTS_PER_INCH;
 
-    const s1 = mode === 'cover'
-      ? Math.max(dstWpt / srcWpt, dstHpt / srcHpt)
-      : Math.min(dstWpt / srcWpt, dstHpt / srcHpt);
+    const chooseSwap = () => {
+      if (mode === 'distort') {
+        // Pick the orientation with the least distortion (scaleX≈scaleY).
+        const scaleX1 = dstWpt / srcWpt;
+        const scaleY1 = dstHpt / srcHpt;
+        const ratio1 = Math.max(scaleX1 / scaleY1, scaleY1 / scaleX1);
 
-    const s2 = mode === 'cover'
-      ? Math.max(dstHpt / srcWpt, dstWpt / srcHpt)
-      : Math.min(dstHpt / srcWpt, dstWpt / srcHpt);
+        const scaleX2 = dstHpt / srcWpt;
+        const scaleY2 = dstWpt / srcHpt;
+        const ratio2 = Math.max(scaleX2 / scaleY2, scaleY2 / scaleX2);
 
-    if (s2 > s1) {
+        if (ratio2 < ratio1) return true;
+        if (ratio2 > ratio1) return false;
+        // tie-break: prefer larger minimum scale
+        const min1 = Math.min(scaleX1, scaleY1);
+        const min2 = Math.min(scaleX2, scaleY2);
+        return min2 > min1;
+      }
+
+      const s1 = mode === 'cover'
+        ? Math.max(dstWpt / srcWpt, dstHpt / srcHpt)
+        : Math.min(dstWpt / srcWpt, dstHpt / srcHpt);
+
+      const s2 = mode === 'cover'
+        ? Math.max(dstHpt / srcWpt, dstWpt / srcHpt)
+        : Math.min(dstHpt / srcWpt, dstWpt / srcHpt);
+
+      return s2 > s1;
+    };
+
+    if (chooseSwap()) {
       const tmp = wIn;
       wIn = hIn;
       hIn = tmp;
@@ -245,22 +267,40 @@ async function renderPreview({ input, mode, allowRotate }) {
 
 async function buildOutputPdf({ input, wIn, hIn, mode, allowRotate, dpi = 300 }) {
   // For IMAGE inputs, auto-rotate means swapping output page orientation (portrait vs landscape).
-  if (input.kind === 'image' && allowRotate && mode !== 'distort') {
+  if (input.kind === 'image' && allowRotate) {
     const srcWpt = (input.w / dpi) * POINTS_PER_INCH;
     const srcHpt = (input.h / dpi) * POINTS_PER_INCH;
 
     const dstWpt0 = wIn * POINTS_PER_INCH;
     const dstHpt0 = hIn * POINTS_PER_INCH;
 
-    const s1 = mode === 'cover'
-      ? Math.max(dstWpt0 / srcWpt, dstHpt0 / srcHpt)
-      : Math.min(dstWpt0 / srcWpt, dstHpt0 / srcHpt);
+    const chooseSwap = () => {
+      if (mode === 'distort') {
+        const scaleX1 = dstWpt0 / srcWpt;
+        const scaleY1 = dstHpt0 / srcHpt;
+        const ratio1 = Math.max(scaleX1 / scaleY1, scaleY1 / scaleX1);
 
-    const s2 = mode === 'cover'
-      ? Math.max(dstHpt0 / srcWpt, dstWpt0 / srcHpt)
-      : Math.min(dstHpt0 / srcWpt, dstWpt0 / srcHpt);
+        const scaleX2 = dstHpt0 / srcWpt;
+        const scaleY2 = dstWpt0 / srcHpt;
+        const ratio2 = Math.max(scaleX2 / scaleY2, scaleY2 / scaleX2);
 
-    if (s2 > s1) {
+        if (ratio2 < ratio1) return true;
+        if (ratio2 > ratio1) return false;
+        return Math.min(scaleX2, scaleY2) > Math.min(scaleX1, scaleY1);
+      }
+
+      const s1 = mode === 'cover'
+        ? Math.max(dstWpt0 / srcWpt, dstHpt0 / srcHpt)
+        : Math.min(dstWpt0 / srcWpt, dstHpt0 / srcHpt);
+
+      const s2 = mode === 'cover'
+        ? Math.max(dstHpt0 / srcWpt, dstWpt0 / srcHpt)
+        : Math.min(dstHpt0 / srcWpt, dstWpt0 / srcHpt);
+
+      return s2 > s1;
+    };
+
+    if (chooseSwap()) {
       const tmp = wIn;
       wIn = hIn;
       hIn = tmp;
