@@ -219,9 +219,9 @@ async function buildOutputPdf({ input, wIn, hIn, mode, allowRotate, dpi = 300 })
 
       const page = out.addPage([dstWpt, dstHpt]);
       if (placement.rotateDeg === 90) {
-        // Rotate the embedded page; pdf-lib rotates around the lower-left corner.
+        // pdf-lib rotates around the drawn object's origin; adjust x so the rotated content stays on-page.
         page.drawPage(embedded, {
-          x: placement.x,
+          x: placement.x + placement.drawW,
           y: placement.y,
           width: placement.drawW,
           height: placement.drawH,
@@ -255,7 +255,7 @@ async function buildOutputPdf({ input, wIn, hIn, mode, allowRotate, dpi = 300 })
   const placement = computePlacement({ srcW: sw, srcH: sh, dstW: dstWpt, dstH: dstHpt, mode, allowRotate });
 
   page.drawImage(img, {
-    x: placement.x,
+    x: placement.rotateDeg === 90 ? (placement.x + placement.drawW) : placement.x,
     y: placement.y,
     width: placement.drawW,
     height: placement.drawH,
