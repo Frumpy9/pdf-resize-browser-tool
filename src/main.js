@@ -54,6 +54,59 @@ function getOutputSizeIn() {
   return { wIn: p.wIn, hIn: p.hIn };
 }
 
+function applyOrientation({ wIn, hIn, orient, input, mode, dpi }) {
+  // If orient is portrait/landscape: force page orientation.
+  // If orient is auto:
+  //  - for images: choose orientation that best fits (depends on mode + dpi)
+  //  - for PDFs: keep selected page size; rotation is handled by computePlacement.
+
+  const force = (o) => {
+    if (o === 'portrait' && wIn > hIn) return { wIn: hIn, hIn: wIn };
+    if (o === 'landscape' && hIn > wIn) return { wIn: hIn, hIn: wIn };
+    return { wIn, hIn };
+  };
+
+  if (orient === 'portrait' || orient === 'landscape') return force(orient);
+
+  // auto
+  if (!input || input.kind !== 'image') return { wIn, hIn };
+
+  const srcWpt = (input.w / (dpi || 300)) * POINTS_PER_INCH;
+  const srcHpt = (input.h / (dpi || 300)) * POINTS_PER_INCH;
+  const dstWpt0 = wIn * POINTS_PER_INCH;
+  const dstHpt0 = hIn * POINTS_PER_INCH;
+
+  const chooseSwap = () => {
+    if (mode === 'distort') {
+      const scaleX1 = dstWpt0 / srcWpt;
+      const scaleY1 = dstHpt0 / srcHpt;
+      const ratio1 = Math.max(scaleX1 / scaleY1, scaleY1 / scaleX1);
+
+      const scaleX2 = dstHpt0 / srcWpt;
+      const scaleY2 = dstWpt0 / srcHpt;
+      const ratio2 = Math.max(scaleX2 / scaleY2, scaleY2 / scaleX2);
+
+      if (ratio2 < ratio1) return true;
+      if (ratio2 > ratio1) return false;
+      return Math.min(scaleX2, scaleY2) > Math.min(scaleX1, scaleY1);
+    }
+
+    const s1 = mode === 'cover'
+      ? Math.max(dstWpt0 / srcWpt, dstHpt0 / srcHpt)
+      : Math.min(dstWpt0 / srcWpt, dstHpt0 / srcHpt);
+
+    const s2 = mode === 'cover'
+      ? Math.max(dstHpt0 / srcWpt, dstWpt0 / srcHpt)
+      : Math.min(dstHpt0 / srcWpt, dstWpt0 / srcHpt);
+
+    // contain: pick larger scale (bigger content). cover: pick smaller scale (less crop).
+    return mode === 'cover' ? (s2 < s1) : (s2 > s1);
+  };
+
+  if (chooseSwap()) return { wIn: hIn, hIn: wIn };
+  return { wIn, hIn };
+}
+
 function setCustomEnabled(enabled) {
   $('#wIn').disabled = !enabled;
   $('#hIn').disabled = !enabled;
@@ -147,58 +200,12 @@ async function loadInput(file) {
   };
 }
 
-async function renderPreview({ input, mode, allowRotate, dpi }) {
+async function renderPreview({ input, mode, orient, dpi }) {
   const canvas = $('#preview');
   const ctx = canvas.getContext('2d');
 
   let { wIn, hIn } = getOutputSizeIn();
-
-  // For IMAGE inputs, auto-rotate means "choose portrait vs landscape output" like a print dialog.
-  // (PDF inputs keep the selected page size; we rotate content instead.)
-  if (input.kind === 'image' && allowRotate) {
-    const useDpi = dpi || 300;
-    const srcWpt = (input.w / useDpi) * POINTS_PER_INCH;
-    const srcHpt = (input.h / useDpi) * POINTS_PER_INCH;
-    const dstWpt = wIn * POINTS_PER_INCH;
-    const dstHpt = hIn * POINTS_PER_INCH;
-
-    const chooseSwap = () => {
-      if (mode === 'distort') {
-        // Pick the orientation with the least distortion (scaleX≈scaleY).
-        const scaleX1 = dstWpt / srcWpt;
-        const scaleY1 = dstHpt / srcHpt;
-        const ratio1 = Math.max(scaleX1 / scaleY1, scaleY1 / scaleX1);
-
-        const scaleX2 = dstHpt / srcWpt;
-        const scaleY2 = dstWpt / srcHpt;
-        const ratio2 = Math.max(scaleX2 / scaleY2, scaleY2 / scaleX2);
-
-        if (ratio2 < ratio1) return true;
-        if (ratio2 > ratio1) return false;
-        // tie-break: prefer larger minimum scale
-        const min1 = Math.min(scaleX1, scaleY1);
-        const min2 = Math.min(scaleX2, scaleY2);
-        return min2 > min1;
-      }
-
-      const s1 = mode === 'cover'
-        ? Math.max(dstWpt / srcWpt, dstHpt / srcHpt)
-        : Math.min(dstWpt / srcWpt, dstHpt / srcHpt);
-
-      const s2 = mode === 'cover'
-        ? Math.max(dstHpt / srcWpt, dstWpt / srcHpt)
-        : Math.min(dstHpt / srcWpt, dstWpt / srcHpt);
-
-      // contain: pick larger scale (bigger content). cover: pick smaller scale (less crop).
-      return mode === 'cover' ? (s2 < s1) : (s2 > s1);
-    };
-
-    if (chooseSwap()) {
-      const tmp = wIn;
-      wIn = hIn;
-      hIn = tmp;
-    }
-  }
+  ({ wIn, hIn } = applyOrientation({ wIn, hIn, orient, input, mode, dpi }));
 
   const dstW = Math.round(wIn * 100);
   const dstH = Math.round(hIn * 100);
@@ -239,7 +246,8 @@ async function renderPreview({ input, mode, allowRotate, dpi }) {
 
   const srcW = srcCanvas.width;
   const srcH = srcCanvas.height;
-  const placement = computePlacement({ srcW, srcH, dstW: cw, dstH: ch, mode, allowRotate: input.kind === 'pdf' ? allowRotate : false });
+  const allowRotate = (orient === 'auto');
+  const placement = computePlacement({ srcW, srcH, dstW: cw, dstH: ch, mode, allowRotate: (input.kind === 'pdf' && allowRotate) });
 
   // For image inputs we do NOT rotate the content anymore (we swap output orientation above).
   // For PDF preview we still support rotating the rendered page bitmap.
@@ -269,48 +277,8 @@ async function renderPreview({ input, mode, allowRotate, dpi }) {
   ctx.fillRect(0, 0, cw, ch);
 }
 
-async function buildOutputPdf({ input, wIn, hIn, mode, allowRotate, dpi = 300 }) {
-  // For IMAGE inputs, auto-rotate means swapping output page orientation (portrait vs landscape).
-  if (input.kind === 'image' && allowRotate) {
-    const srcWpt = (input.w / dpi) * POINTS_PER_INCH;
-    const srcHpt = (input.h / dpi) * POINTS_PER_INCH;
-
-    const dstWpt0 = wIn * POINTS_PER_INCH;
-    const dstHpt0 = hIn * POINTS_PER_INCH;
-
-    const chooseSwap = () => {
-      if (mode === 'distort') {
-        const scaleX1 = dstWpt0 / srcWpt;
-        const scaleY1 = dstHpt0 / srcHpt;
-        const ratio1 = Math.max(scaleX1 / scaleY1, scaleY1 / scaleX1);
-
-        const scaleX2 = dstHpt0 / srcWpt;
-        const scaleY2 = dstWpt0 / srcHpt;
-        const ratio2 = Math.max(scaleX2 / scaleY2, scaleY2 / scaleX2);
-
-        if (ratio2 < ratio1) return true;
-        if (ratio2 > ratio1) return false;
-        return Math.min(scaleX2, scaleY2) > Math.min(scaleX1, scaleY1);
-      }
-
-      const s1 = mode === 'cover'
-        ? Math.max(dstWpt0 / srcWpt, dstHpt0 / srcHpt)
-        : Math.min(dstWpt0 / srcWpt, dstHpt0 / srcHpt);
-
-      const s2 = mode === 'cover'
-        ? Math.max(dstHpt0 / srcWpt, dstWpt0 / srcHpt)
-        : Math.min(dstHpt0 / srcWpt, dstWpt0 / srcHpt);
-
-      // contain: pick larger scale (bigger content). cover: pick smaller scale (less crop).
-      return mode === 'cover' ? (s2 < s1) : (s2 > s1);
-    };
-
-    if (chooseSwap()) {
-      const tmp = wIn;
-      wIn = hIn;
-      hIn = tmp;
-    }
-  }
+async function buildOutputPdf({ input, wIn, hIn, mode, orient, dpi = 300 }) {
+  ({ wIn, hIn } = applyOrientation({ wIn, hIn, orient, input, mode, dpi }));
 
   const dstWpt = wIn * POINTS_PER_INCH;
   const dstHpt = hIn * POINTS_PER_INCH;
@@ -433,10 +401,12 @@ function appHtml() {
         </div>
 
         <div class="row">
-          <label class="check">
-            <input id="rotate" type="checkbox" checked />
-            Auto-rotate to best fit
-          </label>
+          <label>Orientation</label>
+          <select id="orient">
+            <option value="auto">Auto</option>
+            <option value="portrait">Portrait</option>
+            <option value="landscape">Landscape</option>
+          </select>
         </div>
 
         <div class="row">
@@ -470,10 +440,10 @@ async function refresh() {
 
   if (!currentInput) return;
   const mode = $('#mode').value;
-  const allowRotate = $('#rotate').checked;
+  const orient = $('#orient').value;
   const dpi = clamp(Number($('#dpi')?.value || 300), 10, 1200);
 
-  await renderPreview({ input: currentInput, mode, allowRotate, dpi });
+  await renderPreview({ input: currentInput, mode, orient, dpi });
 }
 
 async function main() {
@@ -500,7 +470,7 @@ async function main() {
     await refresh();
   });
 
-  for (const id of ['wIn', 'hIn', 'mode', 'rotate', 'dpi']) {
+  for (const id of ['wIn', 'hIn', 'mode', 'orient', 'dpi']) {
     $(id.startsWith('#') ? id : '#' + id).addEventListener('change', refresh);
   }
 
@@ -543,13 +513,13 @@ async function main() {
       if (!currentInput) return;
       const { wIn, hIn } = getOutputSizeIn();
       const mode = $('#mode').value;
-      const allowRotate = $('#rotate').checked;
+      const orient = $('#orient').value;
 
       status.textContent = `Generating ${fmtIn(wIn)}×${fmtIn(hIn)} PDF…`;
       await time(10);
 
       const dpi = clamp(Number($('#dpi')?.value || 300), 10, 1200);
-      const bytes = await buildOutputPdf({ input: currentInput, wIn, hIn, mode, allowRotate, dpi });
+      const bytes = await buildOutputPdf({ input: currentInput, wIn, hIn, mode, orient, dpi });
       const base = (currentInput.name || 'output').replace(/\.(pdf|png|jpe?g)$/i, '');
       const outName = `${base}_${fmtIn(wIn)}x${fmtIn(hIn)}_${mode}.pdf`;
       downloadBytes(bytes, outName);
