@@ -44,6 +44,13 @@ const server = http.createServer((req, res) => {
       req.url = url.pathname + url.search;
     }
 
+    // Favicons are built at dist root (/favicon.png). Under a prefix the browser asks for /resize/favicon.png.
+    if (p.includes('/favicon.')) {
+      const idx = p.indexOf('/favicon.');
+      url.pathname = p.slice(idx);
+      req.url = url.pathname + url.search;
+    }
+
     return serve(req, res);
   } catch (e) {
     res.statusCode = 500;
