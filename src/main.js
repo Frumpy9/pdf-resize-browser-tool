@@ -69,11 +69,25 @@ function applyOrientation({ wIn, hIn, orient, input, mode, dpi }) {
 
   if (orient === 'portrait' || orient === 'landscape') return force(orient);
 
-  // auto
-  if (!input || input.kind !== 'image') return { wIn, hIn };
+  // auto (pick the best page orientation)
+  if (!input) return { wIn, hIn };
 
-  const srcWpt = (input.w / (dpi || 300)) * POINTS_PER_INCH;
-  const srcHpt = (input.h / (dpi || 300)) * POINTS_PER_INCH;
+  // Source size in any consistent units (ratio matters). For images, use points from DPI.
+  // For PDFs, use the first page render dimensions (ratio only).
+  let srcWpt = 0;
+  let srcHpt = 0;
+  if (input.kind === 'image') {
+    srcWpt = (input.w / (dpi || 300)) * POINTS_PER_INCH;
+    srcHpt = (input.h / (dpi || 300)) * POINTS_PER_INCH;
+  } else if (input.kind === 'pdf') {
+    const fp = input.firstPage || { w: 0, h: 0 };
+    srcWpt = Number(fp.w || 0);
+    srcHpt = Number(fp.h || 0);
+  } else {
+    return { wIn, hIn };
+  }
+
+  if (!(srcWpt > 0) || !(srcHpt > 0)) return { wIn, hIn };
   const dstWpt0 = wIn * POINTS_PER_INCH;
   const dstHpt0 = hIn * POINTS_PER_INCH;
 
