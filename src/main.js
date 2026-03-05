@@ -260,6 +260,8 @@ async function renderPreview({ input, mode, orient, dpi }) {
     rot.height = srcCanvas.width;
     const rctx = rot.getContext('2d');
     rctx.translate(rot.width / 2, rot.height / 2);
+    // Canvas y-axis is down, so positive rotation is clockwise visually.
+    // Our placement.rotateDeg=90 means "rotate clockwise".
     rctx.rotate(Math.PI / 2);
     rctx.drawImage(srcCanvas, -srcCanvas.width / 2, -srcCanvas.height / 2);
     drawCanvas = rot;
@@ -301,13 +303,15 @@ async function buildOutputPdf({ input, wIn, hIn, mode, orient, dpi = 300 }) {
 
       const page = out.addPage([dstWpt, dstHpt]);
       if (placement.rotateDeg === 90) {
-        // width/height are applied BEFORE rotation. Use swapped dims so the post-rotation bbox matches.
+        // Preview uses a +90 canvas rotation (clockwise in screen coords). PDF rotation is CCW for positive angles,
+        // so use -90 here to match the preview orientation.
+        // width/height are applied BEFORE rotation; use swapped dims for the rotated bbox.
         page.drawPage(embedded, {
-          x: placement.x + placement.drawW,
-          y: placement.y,
+          x: placement.x,
+          y: placement.y + placement.drawH,
           width: placement.drawH,
           height: placement.drawW,
-          rotate: degrees(90),
+          rotate: degrees(-90),
         });
       } else {
         page.drawPage(embedded, {
