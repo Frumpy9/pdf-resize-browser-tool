@@ -290,6 +290,8 @@ async function buildOutputPdf({ input, wIn, hIn, mode, orient, dpi = 300 }) {
     const srcPdf = await PDFDocument.load(input.buf.slice(0));
     const pageCount = srcPdf.getPageCount();
 
+    const allowRotate = (orient === 'auto');
+
     for (let i = 0; i < pageCount; i++) {
       const [embedded] = await out.embedPages([srcPdf.getPage(i)]);
       const { width: sw, height: sh } = embedded.size();
