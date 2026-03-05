@@ -247,8 +247,9 @@ async function renderPreview({ input, mode, orient, dpi }) {
 
   const srcW = srcCanvas.width;
   const srcH = srcCanvas.height;
-  const allowRotate = (orient === 'auto');
-  const placement = computePlacement({ srcW, srcH, dstW: cw, dstH: ch, mode, allowRotate: (input.kind === 'pdf' && allowRotate) });
+  // For PDFs: always allow rotating content to best fit inside the chosen page orientation.
+  // (Orientation dropdown controls the PAGE size; rotation controls CONTENT placement.)
+  const placement = computePlacement({ srcW, srcH, dstW: cw, dstH: ch, mode, allowRotate: (input.kind === 'pdf') });
 
   // For image inputs we do NOT rotate the content anymore (we swap output orientation above).
   // For PDF preview we still support rotating the rendered page bitmap.
@@ -290,7 +291,7 @@ async function buildOutputPdf({ input, wIn, hIn, mode, orient, dpi = 300 }) {
     const srcPdf = await PDFDocument.load(input.buf.slice(0));
     const pageCount = srcPdf.getPageCount();
 
-    const allowRotate = (orient === 'auto');
+    const allowRotate = true;
 
     for (let i = 0; i < pageCount; i++) {
       const [embedded] = await out.embedPages([srcPdf.getPage(i)]);
