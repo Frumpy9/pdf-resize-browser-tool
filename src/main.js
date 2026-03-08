@@ -127,6 +127,37 @@ function setCustomEnabled(enabled) {
   $('#hIn').disabled = !enabled;
 }
 
+function inputAspectRatio(input) {
+  // Returns width/height ratio from input.
+  if (!input) return null;
+  if (input.kind === 'image') {
+    if (input.w > 0 && input.h > 0) return input.w / input.h;
+  }
+  if (input.kind === 'pdf') {
+    const fp = input.firstPage;
+    if (fp?.w > 0 && fp?.h > 0) return fp.w / fp.h;
+  }
+  return null;
+}
+
+function syncDimsToAspect({ changed, ratio }) {
+  // changed: 'w' | 'h'
+  if (!ratio || !(ratio > 0)) return;
+  const wEl = $('#wIn');
+  const hEl = $('#hIn');
+  const w = Number(wEl.value);
+  const h = Number(hEl.value);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return;
+
+  if (changed === 'w') {
+    const newH = w / ratio;
+    hEl.value = String(Math.max(0.01, Math.round(newH * 100) / 100));
+  } else {
+    const newW = h * ratio;
+    wEl.value = String(Math.max(0.01, Math.round(newW * 100) / 100));
+  }
+}
+
 function computePlacement({ srcW, srcH, dstW, dstH, mode, allowRotate }) {
   // Returns: { drawW, drawH, x, y, rotateDeg }
   const fit = (sw, sh, dw, dh) => {
@@ -418,6 +449,13 @@ function appHtml() {
         </div>
 
         <div class="row">
+          <label class="check">
+            <input id="lockAR" type="checkbox" />
+            Lock output aspect ratio to input
+          </label>
+        </div>
+
+        <div class="row">
           <label>Scaling</label>
           <select id="mode">${modeOptions}</select>
         </div>
@@ -474,6 +512,8 @@ async function main() {
   // defaults
   $('#preset').value = '4 x 6 in';
   $('#mode').value = 'contain';
+  $('#orient').value = 'auto';
+  $('#lockAR').checked = false;
   setCustomEnabled(false);
 
   const updateButtons = () => {
@@ -492,7 +532,45 @@ async function main() {
     await refresh();
   });
 
-  for (const id of ['wIn', 'hIn', 'mode', 'orient', 'dpi']) {
+  // Lock aspect ratio → force Custom sizing (since presets disable w/h)
+  $('#lockAR').addEventListener('change', async () => {
+    if ($('#lockAR').checked) {
+      if ($('#preset').value !== 'custom') {
+        $('#preset').value = 'custom';
+        setCustomEnabled(true);
+      }
+      const ratio = inputAspectRatio(currentInput);
+      if (ratio) {
+        // Keep the short edge as-is, recompute the long edge.
+        const w = Number($('#wIn').value);
+        const h = Number($('#hIn').value);
+        if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
+          if (w <= h) {
+            $('#hIn').value = String(Math.max(0.01, Math.round((w / ratio) * 100) / 100));
+          } else {
+            $('#wIn').value = String(Math.max(0.01, Math.round((h * ratio) * 100) / 100));
+          }
+        }
+      }
+    }
+    await refresh();
+  });
+
+  // Width/height changes: if lockAR is enabled, adjust the other dimension immediately.
+  $('#wIn').addEventListener('input', async () => {
+    if (!$('#lockAR').checked) return;
+    const ratio = inputAspectRatio(currentInput);
+    if (ratio) syncDimsToAspect({ changed: 'w', ratio });
+    await refresh();
+  });
+  $('#hIn').addEventListener('input', async () => {
+    if (!$('#lockAR').checked) return;
+    const ratio = inputAspectRatio(currentInput);
+    if (ratio) syncDimsToAspect({ changed: 'h', ratio });
+    await refresh();
+  });
+
+  for (const id of ['mode', 'orient', 'dpi']) {
     $(id.startsWith('#') ? id : '#' + id).addEventListener('change', refresh);
   }
 
@@ -515,7 +593,28 @@ async function main() {
       if (input.kind === 'pdf') {
         meta.textContent = `${input.name} — PDF (${input.pageCount} pages)`;
       } else {
-        meta.textContent = `${input.name} — Image (${input.w}×${input.h}px @ 300dpi)`;
+        const dpi = clamp(Number($('#dpi')?.value || 300), 10, 1200);
+        meta.textContent = `${input.name} — Image (${input.w}×${input.h}px @ ${dpi}dpi)`;
+      }
+
+      // If Lock AR is enabled, recompute the long edge immediately on upload.
+      if ($('#lockAR').checked) {
+        if ($('#preset').value !== 'custom') {
+          $('#preset').value = 'custom';
+          setCustomEnabled(true);
+        }
+        const ratio = inputAspectRatio(currentInput);
+        if (ratio) {
+          const w = Number($('#wIn').value);
+          const h = Number($('#hIn').value);
+          if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
+            if (w <= h) {
+              $('#hIn').value = String(Math.max(0.01, Math.round((w / ratio) * 100) / 100));
+            } else {
+              $('#wIn').value = String(Math.max(0.01, Math.round((h * ratio) * 100) / 100));
+            }
+          }
+        }
       }
 
       status.textContent = '';
