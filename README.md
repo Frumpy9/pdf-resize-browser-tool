@@ -1,6 +1,11 @@
-# pdf-resize-tool-browser
+# pdf-resize-tool-browser (/resize)
 
-Client-side (browser-only) tool to resize **PDFs or images** into a new **PDF** at a target size (e.g. 4×6) like “Print to Adobe PDF” with a custom paper size.
+Client-side (browser-only) tool to resize **PDFs or images** into a new **PDF** at a target size (e.g. 4×6). Think “Print to PDF” with a custom paper size.
+
+## Privacy / Security
+- **All processing happens locally in your browser** (via `pdf-lib` + `pdfjs-dist`).
+- The app **does not upload** your PDF/image to the server.
+- The server (optional) only serves static files (HTML/JS/CSS) for the UI.
 
 ## Features
 - Input: **PDF**, **JPG**, **PNG**
@@ -11,38 +16,32 @@ Client-side (browser-only) tool to resize **PDFs or images** into a new **PDF** 
   - **Fill (cover)**: no distortion, crop as needed
   - **Distort**: stretch to fill
 - **Auto-rotate** to best fit
-- Preview window (shows placement for page 1)
-- Staples-ish styling (red accent)
+- Preview (placement for page 1)
 
-## Dev
+## Run locally
+
+### Dev
 ```bash
 npm install
 npm run dev
 ```
 
-## Prod (local service)
-Build + serve the static `dist/` bundle via `server.js`:
+### Production build
+Build + serve the static `dist/` bundle:
 
 ```bash
 npm run build
-PORT=3340 npm run start
+npm run preview
 ```
 
-### Cloudflare Tunnel hosting under a prefix
-This is set up like the banner app:
-- `vite.config.js` uses `base: './'`
-- `server.js` rewrites `/<prefix>/assets/*` → `/assets/*`
-- and redirects `/prefix` → `/prefix/` to keep relative assets stable.
+## Self-hosting under a path prefix
+This app is path-prefix safe when built with `base: './'` (see `vite.config.js`).
 
-Example tunnel rule:
-- `staples.okok.bet/resize*` → `http://10.0.0.77:3340`
+If you use the included `server.js`, it can:
+- redirect `/prefix` → `/prefix/` (keeps relative assets stable)
+- rewrite `/<prefix>/assets/*` → `/assets/*`
 
-## Systemd user service
-Installed at:
-- `~/.config/systemd/user/pdf-resize-tool-browser.service`
+This makes it easy to mount under subpaths like `/resize/` behind a reverse proxy.
 
-Commands:
-```bash
-systemctl --user restart pdf-resize-tool-browser.service
-systemctl --user status pdf-resize-tool-browser.service
-```
+## License
+Add a LICENSE file if you plan to publish this repo publicly.
