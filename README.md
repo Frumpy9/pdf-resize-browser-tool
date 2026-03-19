@@ -1,5 +1,7 @@
 # pdf-resize-tool-browser (/resize)
 
+> **AI-generated code notice:** This project was largely generated and iterated with the help of AI. Please review and test thoroughly before using in production.
+
 Client-side (browser-only) tool to resize **PDFs or images** into a new **PDF** at a target size (e.g. 4×6). Think “Print to PDF” with a custom paper size.
 
 ## Privacy / Security
