@@ -1,4 +1,10 @@
 import './style.css';
+
+// Hide the "offline" hint if JS is running.
+try {
+  const hint = document.getElementById('offlineHint');
+  if (hint) hint.style.display = 'none';
+} catch {}
 import { PDFDocument, degrees } from 'pdf-lib';
 // Use the legacy PDF.js build for broader browser compatibility (work PCs can be behind).
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';

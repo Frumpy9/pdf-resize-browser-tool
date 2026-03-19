@@ -7,6 +7,18 @@
     <link rel="icon" type="image/png" href="./favicon.png" />
   </head>
   <body>
+    <div id="offlineHint" style="max-width:760px;margin:28px auto;padding:14px 16px;border:1px solid #ddd;border-radius:12px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;line-height:1.4;">
+      <b>Having trouble loading this app?</b><br/>
+      It looks like you opened this HTML file directly (or your browser blocked module scripts/workers).
+      This app must be served by a local web server.
+      <div style="margin-top:10px;">
+        <div><b>Quick fix (Python):</b> <code>python3 -m http.server 8000</code></div>
+        <div><b>Node:</b> <code>npx serve .</code></div>
+        <div style="margin-top:6px;">Then open: <code>http://localhost:8000/</code></div>
+      </div>
+      <div style="margin-top:10px;color:#666;font-size:13px;">If the app loads normally, this message will disappear.</div>
+    </div>
+
     <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
   </body>
