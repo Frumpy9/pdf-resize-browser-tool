@@ -54,14 +54,28 @@ This produces `pdf-resize-browser-tool-dist.zip` (contains `dist/`).
 
 ### Run offline (no internet)
 1) Unzip the release zip
-2) From inside the unzipped folder (the one that contains `index.html`), run:
+2) Start a local server in the folder that contains `index.html` (pick one):
 
+**Option A — Python (recommended)**
 ```bash
 python3 -m http.server 8000
 ```
 
+**Option B — Node (serve static files)**
+```bash
+npx serve .
+```
+
+**Option C — Node (use the included server.js)**
+If you cloned the repo (not just the zip):
+```bash
+npm install
+npm run build
+npm run start
+```
+
 3) Open:
-- `http://localhost:8000/`
+- `http://localhost:8000/` (or whatever port your server prints)
 
 ## License
 Add a LICENSE file if you plan to publish this repo publicly.
